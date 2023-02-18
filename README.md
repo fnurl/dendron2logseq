@@ -64,6 +64,7 @@ The `--four-space-indent` is used to use four spaces to indent each level instea
 
 My use of Dendron has been quite limited feature-wise, which I am sort of happy for now, as this made creating a script for my needs easier. If you have a different or more advanced setup you might find this script lacking. Here are the limitations I can think of:
 
+- incorrect/unexpected markdown syntax may procduce unexpected results
 - parsing is done line by line, so if you use hard linebreaks in a paragraph, you will get one bullet point for each line
 - line base parsing also mean that e.g. wiki links that span over two or more lines will not be changed in any way
 - if you have indented code blocks the indentation level will be "reset" (the whole block, not the individual lines")
