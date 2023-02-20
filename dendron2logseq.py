@@ -228,7 +228,11 @@ def process_and_save_file(source_path, output_path, new_name,
 
 
 def convert_embeds(line):
-    """Convert embeds, ![[a.b.note-name]] -> {{embed [[a/b/note-name]]}}."""
+    """Convert embeds, ![[a.b.note-name]] -> {{embed [[a/b/note-name]]}}.
+
+    Anchors are removed, i.e. both ![[note#^ref]] and ![[note#start:#end]] are
+    changed to {{embed [[note]]}}
+    """
     #print(f"convert embeds: {line!r}")
     # line is split into splits (with possible embeds to be converted)
     # by inline code separators (to be kept as they are)

@@ -11,6 +11,11 @@ The script copies `.md` files and the `assets` directory from a Dendron vault di
 - changes wikilinks from Dendron's `[[catetegory.subcategory.note-title]]` to Logseq's `[[category/subcategory/note-title]]`, it also **removes** aliases and anchors from the wikilinks:
     - `[[alias|note-title]]` -> `[[note-title]]`
     - `[[note-title#heading]]` -> `[[note-title]]`
+- Dendron embeds are changed to Logseq embeds, note that **anchors are removed**:
+    - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
+    - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
+    - `![[a.b.embedded-note#^blockref]]` -> `{{embed [[a/b/embedded-note]]}}
+    - `![[a.b.embedded-note#start:#end]]` -> `{{embed [[a/b/embedded-note]]}}
 - inline images using `![.*](/assets/.*)` are changed to `![.*](../assets/.*)`; you need to put the `assets` folder in the same directory as the `pages/` directory
 - Logseq reads `yaml` frontmatter and picks up the title, but titles must be unique, so my frontmatter solution is the following:
     - use the `title:` value as an alias (first node - `alias:: title`)
