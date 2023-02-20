@@ -7,22 +7,23 @@ Limited export of the contents of a [Dendron](https://www.dendron.so) vault to a
 
 The script copies `.md` files and the `assets` directory from a Dendron vault directory to an output directory. It makes the `.md` files Logseq ready by doing the following:
 
-- renames files from Dendrons `category.subcategory.note-title.md` to Logseqs `category___subcategory___note-title.md`
-- changes wikilinks from Dendron's `[[catetegory.subcategory.note-title]]` to Logseq's `[[category/subcategory/note-title]]`, it also **removes** aliases and anchors from the wikilinks:
+- **renames files** from Dendrons `category.subcategory.note-title.md` to Logseqs `category___subcategory___note-title.md`
+- **changes wikilinks** from Dendron's `[[catetegory.subcategory.note-title]]` to Logseq's `[[category/subcategory/note-title]]`, it also **removes** aliases and anchors from the wikilinks:
     - `[[alias|note-title]]` -> `[[note-title]]`
     - `[[note-title#heading]]` -> `[[note-title]]`
-- Dendron embeds are changed to Logseq embeds, note that **anchors are removed**:
+- **changes embeds** from Dendron's syntax to Logseq' syntax, note that **anchors are removed**:
     - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
     - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
     - `![[a.b.embedded-note#^blockref]]` -> `{{embed [[a/b/embedded-note]]}}
     - `![[a.b.embedded-note#start:#end]]` -> `{{embed [[a/b/embedded-note]]}}
-- inline images using `![.*](/assets/.*)` are changed to `![.*](../assets/.*)`; you need to put the `assets` folder in the same directory as the `pages/` directory
-- Logseq reads `yaml` frontmatter and picks up the title, but titles must be unique, so my frontmatter solution is the following:
-    - use the `title:` value as an alias (first node - `alias:: title`)
-    - make the rest of the frontmatter a code block
-    - title is only included in the frontmatter code block if aliases are not created
-- title -> alias can be turned off and it is possible to just remove the frontmatter
-- headings are used to infer outline level, the `#` characters are left and the heading and its children are indented according to the number of `#` used by the heading.
+- **changes inline images** from `![.*](/assets/.*)` to `![.*](../assets/.*)`; you need to put the `assets` folder in the same directory as the `pages/` directory
+- **yaml frontmatter -> code block**: the yaml frontmatter is converted to a code block at the top of the page
+    - Logseq reads `yaml` frontmatter and picks up the title, but titles must be unique, I had a lot of pages with the same name but in different hierarchies, so this was my solution
+        - frontmatter can be excluded entirely using `--remove-frontmatter`
+        - `title:` value can be used as an alias (first node - `alias:: title`) using `--alias-title`
+        - title is only included in the frontmatter code block if aliases are not created
+- **infer outline level using headings**: headings are used to infer outline level, the `#` characters are left and the heading and its children are indented according to the number of `#` used by the heading.
+- **convert lines to bullets**: every line is made into a bullet; i.e. no "free" paragraphs exist in the output
 
 Although I have done some basic verification of the functionality, but there might be bugs etc. You need to verify that the results the script produces are what you want. **I take NO responsibility for any loss of data.**
 
