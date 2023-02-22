@@ -23,7 +23,24 @@ The script copies `.md` files and the `assets` directory from a Dendron vault di
         - `title:` value can be used as an alias (first node - `alias:: title`) using `--alias-title`
         - title is only included in the frontmatter code block if aliases are not created
 - **infer outline level using headings**: headings are used to infer outline level, the `#` characters are left and the heading and its children are indented according to the number of `#` used by the heading.
-- **convert lines to bullets**: every line is made into a bullet; i.e. no "free" paragraphs exist in the output
+- **convert paragraphs to bullets**: every paragraph separated by one or more blank lines is made into a bullet; i.e. no "free" paragraphs exist in the output
+- ~~**convert lines to bullets**: every line is made into a bullet; i.e. no "free" paragraphs exist in the output~~
+
+
+### Added 2023-02-21
+
+- **multiline** paragraphs and blockquotes are kept in the same outline bullet
+- **use `title:` as `title::` property**; will abort if duplicate titles are found
+- **converts indented code blocks** (using tab or four spaces as prefix) to fenced code blocks
+- **added option for how to handle empty lines**, `--remove-empty-lines {none, all, trim}`, default: `trim`:
+    - `none`: don't remove empty lines
+    - `all`: remove all empty lines
+    - `trim`: remove empty lines in the beginning of the body and after headings, keep a maximum of one empty line in the rest of the body
+- **handles fenced code blocks in lists**
+- **handles blockquotes in lists**
+
+
+## Data loss
 
 Although I have done some basic verification of the functionality, but there might be bugs etc. You need to verify that the results the script produces are what you want. **I take NO responsibility for any loss of data.**
 
@@ -33,8 +50,10 @@ I don't think I am missing anything in my export, but I might discover something
 ## Usage
 
 ```
-usage: dendron2logseq.py [-h] [--remove-frontmatter] [--alias-title]           
-                         [--four-space-indent] [-y] vault_path output_path
+usage: dendron2logseq.py [-h] [--remove-frontmatter]
+                         [--alias-title | --use-title] [--four-space-indent] 
+                         [--remove-empty-lines {none,all,trim}] [-y]
+                         vault_path output_path
 
 positional arguments:
   vault_path
@@ -45,7 +64,15 @@ options:
   --remove-frontmatter  Remove frontmatter. Frontmatter is kept as a code block 
                         by default
   --alias-title         Add existing title as an alias.
+  --use-title           Use title from frontmatter as title:: property value. 
+                        Requires that no duplicate titles exist.
   --four-space-indent   Indent using four spaces. Default: tab
+  --remove-empty-lines {none,all,trim}
+                        Remove empty lines. none: Don't remove any empty lines, 
+                        all: Remove all empty lines, trim: Remove empty lines 
+                        after headings and
+                        in beginning, keep maximum of one empty line in rest of 
+                        document. Default: trim
   -y, --yes             Answer yes to all prompts.
 ```
 
@@ -71,10 +98,16 @@ The `--four-space-indent` is used to use four spaces to indent each level instea
 My use of Dendron has been quite limited feature-wise, which I am sort of happy for now, as this made creating a script for my needs easier. If you have a different or more advanced setup you might find this script lacking. Here are the limitations I can think of:
 
 - incorrect/unexpected markdown syntax may procduce unexpected results
-- parsing is done line by line, so if you use hard linebreaks in a paragraph, you will get one bullet point for each line
-- line base parsing also mean that e.g. wiki links that span over two or more lines will not be changed in any way
-- if you have indented code blocks the indentation level will be "reset" (the whole block, not the individual lines")
+- line based parsing of links and embeds: links/embeds that span over two or more lines will not be changed in any way
 - any special characters are left untouched in the file name (Logseq urlencodes special characters)
+- does not parse headings created with `---` or `===` following a line of text
+- does not handle ordered lists
+
+
+### Fixed
+
+- ~~if you have fenced code blocks in a nested list item the indentation level will be "reset" (the whole block, not the lines within the code block)~~ *Fixed: 2023-02-22*
+- ~~parsing is done line by line, so if you use hard linebreaks in a paragraph, you will get one bullet point for each line~~ *Fixed 2023-02-22*
 
 
 ## Backstory

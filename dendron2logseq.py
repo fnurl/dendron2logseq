@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Script for converting Dendron vaults to Logseq graphs.
+
+- Dendron: https://www.dendron.so
+- Logseq: https://logseq.com
+
+Author: Jody Foo, February 2023.
+"""
 import argparse
 import re
 import sys
@@ -8,9 +15,12 @@ from shutil import copytree
 # Default globals
 INDENT = '\t'
 
-# compiled regular expressions
+# Compiled regular expressions
 heading_re = re.compile(r"(#+) ")
+tab_indents_re = re.compile(r"(\t+)")
 inline_code_re = re.compile(r"`.*?`")
+indent_level_re = re.compile(r"(    )+")
+bullet_re = re.compile(r"^( *)([-*+])(.*)")
 embed_token_re = re.compile(r"!\[\[.+?\]\]")
 embed_token_with_anchor_re = re.compile(r"!\[\[(.+?)(#.*)?\]\]")
 wiki_link_token_re = re.compile(r"\[\[.+?\]\]")
@@ -77,9 +87,25 @@ def get_title(md_filepath):
     return title
 
 
-def vault2graph(vault_path, output_path, remove_frontmatter, alias_title):
+def get_indent_level(line):
+    m = indent_level_re.match(line)
+    if m:
+        return len(m[0]) // 4
+    return 0
+
+
+def push_to_stack_no_repeat(stack, value):
+    if not stack or stack[-1] != value:
+        stack.append(value)
+
+
+def vault2graph(vault_path, output_path, remove_frontmatter, alias_title,
+                use_title, remove_empty_lines):
     """Save assets dir and processed markdown files to output_path."""
-    print(f"\nProcessing Dendron vault at {vault_path.resolve()} [{remove_frontmatter=}, {alias_title=}]")
+    print(f"\nProcessing Dendron vault at {vault_path.resolve()}")
+    msg = "Options: {rm_fm}, {alias}, {title}, {rm_lines}\n"
+    print(msg.format(rm_fm=f"{remove_frontmatter=}", alias=f"{alias_title=}",
+                     title=f"{use_title=}", rm_lines=f"{remove_empty_lines=}"))
 
     # process directory items
     assets_path = None
@@ -93,24 +119,31 @@ def vault2graph(vault_path, output_path, remove_frontmatter, alias_title):
             new_name = f"{childpath.stem.replace('.', '___')}.md"
             print(f"{childpath.name} -> {new_name}")
             process_and_save_file(childpath, output_path, new_name,
-                                  remove_frontmatter, alias_title)
+                                  remove_frontmatter, alias_title, use_title,
+                                  remove_empty_lines)
         else:
             print(f"WARNING: File not handled, {childpath.name!r}")
 
     if assets_path:
-        print(f"Assets directory found, copying {assets_path.resolve()} -> {(output_path / 'assets').resolve()}")
+        msg = "Assets directory found, copying {src} -> {dest}"
+        print(msg.format(src=assets_path.resolve(),
+              dest=(output_path / 'assets').resolve()))
         copytree(assets_path, output_path / "assets", dirs_exist_ok=True)
 
 
 def process_and_save_file(source_path, output_path, new_name,
-                          remove_frontmatter, alias_title):
+                          remove_frontmatter, alias_title, use_title,
+                          remove_empty_lines):
     output = []
     with open(source_path, 'r') as source_file:
         first_line_checked = False
         in_frontmatter = False
-        in_code_block = False
+        in_body = False
         frontmatter_handled = False
-        outline_level = 0
+        heading_level = 0
+        indent_level = 0
+        content_stack = []
+        previous_line = None
 
         for line in source_file:
             # first line, check if frontmatter exists
@@ -148,6 +181,8 @@ def process_and_save_file(source_path, output_path, new_name,
                 elif line.startswith('title:'):
                     if alias_title:
                         output.insert(0, f"alias:: {line[6:].lstrip()}")
+                    elif use_title:
+                        output.insert(0, f"title:: {line[6:].lstrip()}")
                     elif not remove_frontmatter:
                         output.append(f"  {line}")
                 # add key to code block
@@ -157,56 +192,280 @@ def process_and_save_file(source_path, output_path, new_name,
                 # next line (no need for else below)
                 continue
 
+            # keep unprocessed line (except for \t replacement) to save as
+            # previous_line
+            unprocessed_line = line
+
+            #### BETWEEN FRONTMATTER AND BODY ####
+
+            if not in_body:
+                if line.strip() == '':
+                    previous_line = unprocessed_line
+                    if remove_empty_lines in ['all', 'trim']:
+                        continue
+                    elif remove_empty_lines == 'none':
+                        output.append("-\n")
+                else:
+                    in_body = True
+
             #### PROCESS DOCUMENT BODY ####
             #print(f"BODY: {line!r}")
 
-            # code block start/end
-            # LIMITATION: Does not handle indented code blocks. Will remove any
-            # indentation before '```'
+            # content_stack is used to keep track of the current block context
+            # content_stack is [] in the beginning
+            #
+            # possible items on the stack:
+            #  - "fenced code block"
+            #  - "indented code block"
+            #  - "heading"
+            #  - "ul" (unordered list)
+            #  - "paragraph"
+            #
+            # changes to content_stack
+            #   - an empty line clears the stack unless the top item is
+            #     "heading"
+            #   - headings clears the stack
+            #   - indented code blocks are only valid outside if the stack is
+            #     empty or if directly after "heading"
+            #   - fenced code blocks are valid everywhere
+            #   - list clears content stack if the current top item is not
+            #     "list"
+            #   - if top of stack is heading and any content is encountered,
+            #     stack is cleared
+            #
+
+            # replace initial tabs with four spaces
+            if line[0] == '\t':
+                match = tab_indents_re.match(line)
+                if match:
+                    num_tabs = len(match[1])
+                    line = f"{'    '*num_tabs}{line[num_tabs:]}"
+
+            ######## CODE BLOCKS ########
+
+            # ``` code block start/end
+            # LIMITATION: Does not handle indented code blocks (in outline).
+            # Will remove any indentation before '```'
             if line.lstrip().startswith("```"):
+                #print(f"```: {line=}, {content_stack=}")
                 #print(f"CODE: {line!r}")
-                line = line.lstrip()
+                #line = line.lstrip()
                 # start
-                if not in_code_block:
-                    line = f"{INDENT*outline_level}- {line}"
+                if content_stack[-1:] != ["fenced code block"]:
+                    # fenced code block clears stack if added after heading
+                    if content_stack[-1:] == ["heading"]:
+                        indent_level = 0
+                        content_stack.clear()
+
+                    # start of code block part of list
+                    if 'list' in content_stack:
+                        block_indent = get_indent_level(line)
+                        # start at same or greater indent level -> part of same
+                        # list item
+                        if block_indent >= indent_level:
+                            # assume indent is correct
+                            line = f"{INDENT*heading_level}{line}"
+                        # outdented level -> new fenced code block in list
+                        else:
+                            indent_level = block_indent
+                            line = f"{INDENT*heading_level}{INDENT*block_indent}- {line.lstrip()}"
+                    # start of code block outside list
+                    else:
+                        # fenced code block is part of paragraph, align with
+                        # paragraph bullet
+                        if content_stack[-1:] == ['paragraph']:
+                            line = f"{INDENT*heading_level}  {line}"
+                        # fenced code block is not in list or part of paragraph
+                        # -> new bullet
+                        else:
+                            # clears content_stack
+                            indent_level = 0
+                            content_stack.clear()
+                            line = f"{INDENT*heading_level}- {line}"
+                    push_to_stack_no_repeat(content_stack, "fenced code block")
                 # end
                 else:
-                    line = f"{INDENT*outline_level}  {line}"
-                in_code_block = not in_code_block
+                    # code block part of list, assume indent good
+                    if 'list' in content_stack:
+                        line = f"{INDENT*heading_level}{line}"
+                    # otherwise align with paragraph bullet
+                    else:
+                        line = f"{INDENT*heading_level}  {line}"
+                    content_stack.pop()
                 output.append(line)
+                previous_line = unprocessed_line
                 continue
 
-            # In code block, do not change line, just indent
-            if in_code_block:
+            # In fenced code block, do not change line, just indent
+            # assume line is originally correctly indented
+            if content_stack[-1:] == ["fenced code block"]:
                 #print(f"CODE: {line!r}")
-                line = f"{INDENT*outline_level}  {line}"
+                # code block part of list, assume indent good
+                if 'list' in content_stack:
+                    line = f"{INDENT*heading_level}{line}"
+                # otherwise align with paragraph bullet
+                else:
+                    line = f"{INDENT*heading_level}  {line}"
                 output.append(line)
+                previous_line = unprocessed_line
                 continue
 
-            # Outside of code block - use headings to determine outline
-            # hierarchy and process internal links and embeds
+            # possible indented code block starts with '    '
+            if line.startswith('    '):
+                # start of indented code block?
+                # only start if content_stack is empty or after heading and
+                # not already in indented code block
+                #print(f"{line=}, {content_stack=}")
+                if ((not content_stack or content_stack[-1:] == ["heading"])
+                        and content_stack[-1:] != ["indented code block"]):
+                    #print("START OF INDENTED CODE BLOCK")
+                    # indented code block clears stack if added after heading
+                    if content_stack[-1:] == ["heading"]:
+                        indent_level = 0
+                        content_stack.clear()
+                    output.append(f"{INDENT*heading_level}- ```\n")
+                    push_to_stack_no_repeat(content_stack, "indented code block")
+
+                # in indented code block
+                if content_stack[-1:] == ["indented code block"]:
+                    # add code line to code block
+                    line = f"{INDENT*heading_level}  {line[4:]}"
+                    output.append(line)
+                    previous_line = unprocessed_line
+                    continue
+            # end of indented code block
+            elif content_stack[-1:] == ["indented code block"]:
+                # add ending ```
+                output.append(f"{INDENT*heading_level}  ```\n")
+                # no longer in indented code block
+                content_stack.pop()
+
+            ######## NON-CODE BLOCKS ########
+            # Outside of code block and frontmatter
+
+            # Handle empty lines: keep all, remove all, trim
+            if line.strip() == '':
+                #print(f"EMPTY LINE a: {previous_line=}, {content_stack=}")
+                # empty line clears stack if top of stack is not "heading"
+                if content_stack[-1:] != ["heading"]:
+                    indent_level = 0
+                    content_stack.clear()
+                #print(f"EMPTY LINE b: {previous_line=}, {content_stack=}")
+
+                # keep empty lines
+                if remove_empty_lines == 'none':
+                    line = f"{INDENT*heading_level}- {line}"
+                    output.append(line)
+                # remove all empty lines
+                elif remove_empty_lines == 'all':
+                    pass
+                # trim empty lines
+                elif remove_empty_lines == 'trim':
+                    #print(f"TRIM: {previous_line=}, {content_stack=}")
+                    # remove empty lines after headings
+                    if content_stack[-1:] == ["heading"]:
+                        pass
+                    # keep one empty line
+                    elif previous_line.strip() != '':
+                        line = f"{INDENT*heading_level}- {line}"
+                        output.append(line)
+                previous_line = unprocessed_line
+                continue
+
+            ######## NON-EMPTY, NON-CODE BLOCK LINES ########
+
+            # horizontal rules
+            if line.strip() in ['---', '***']:
+                line = f"{INDENT*heading_level}- {line.lstrip()}"
+                output.append(line)
+                previous_line = unprocessed_line
+                continue
+
+            # Headings - Use headings to determine outline hierarchy
             if line[0] == '#':
                 #print(f"HEADING: {line!r}")
                 match = heading_re.match(line)
                 if match:
-                    outline_level = len(match[1])
+                    heading_level = len(match[1])
+
+                    # heading clears content_stack
+                    indent_level = 0
+                    content_stack.clear()
+
                     # indent heading
-                    line = f"{INDENT*(outline_level-1)}- {line}"
+                    line = f"{INDENT*(heading_level-1)}- {line}"
                     line = convert_internal_links(line)
                     output.append(line)
+                    push_to_stack_no_repeat(content_stack, "heading")
+                    previous_line = unprocessed_line
                     continue
 
-            # Indent empty lines
-            if line.lstrip() == '':
-                line = f"{INDENT*outline_level}-{line}"
-            # Indent bullet points
-            elif line.lstrip()[0] == '-':
-                line = f"{INDENT*outline_level}{line}"
-            # Indent line ordinary lines
+            # Blockquotes
+            if line.lstrip()[0] == '>':
+                #print(f">: {line=}, {block_indent=}, {indent_level=}, {content_stack=}")
+                # block quotes in lists
+                if 'list' in content_stack:
+                    block_indent = get_indent_level(line)
+                    # same or greater indent level -> part of same list item
+                    if block_indent >= indent_level:
+                        # assume indent is correct
+                        line = f"{INDENT*heading_level}{line}"
+                    # outdented level -> new blockquote block in list
+                    else:
+                        indent_level = block_indent
+                        line = f"{INDENT*heading_level}{INDENT*block_indent}- {line.lstrip()}"
+                # outside list
+                else:
+                    # continuation of block quote outside list
+                    if content_stack[-1:] == ['blockquote']:
+                        line = f"{INDENT*heading_level}  {line}"
+                    # new blockquote outside list
+                    else:
+                        # resets content_stack
+                        indent_level = 0
+                        content_stack.clear()
+                        line = f"{INDENT*heading_level}- {line}"
+                line = convert_internal_links(line)
+                output.append(line)
+                push_to_stack_no_repeat(content_stack, 'blockquote')
+                previous_line = unprocessed_line
+                continue
+
+            ############ BULLET OR PARAGRAPH ############
+
+            # bullets (unordered list)
+            if line.lstrip()[:2] in ['- ', '* ', '+ ']:
+                # new bullet -> new indent_level
+                indent_level = get_indent_level(line)
+
+                # normalize bullet to '- '
+                line = bullet_re.sub(r"\1-\3", line)
+                line = f"{INDENT*heading_level}{line}"
+
+                # push context
+                push_to_stack_no_repeat(content_stack, "list")
+
+            # line without block prefix {-, >}
             else:
-                line = f"{INDENT*outline_level}- {line}"
+                block_indent = get_indent_level(line)
+
+                # no linebreak, and same indent level -> line belongs to the
+                # previous paragraph/bullet/blockquote
+                if (previous_line and previous_line.strip() != ''
+                        and block_indent >= indent_level):
+                    line = f"{INDENT*heading_level}  {line}"
+                # new paragraph
+                else:
+                    # clears content_stack
+                    indent_level = 0
+                    content_stack.clear()
+                    line = f"{INDENT*heading_level}- {line}"
+                    push_to_stack_no_repeat(content_stack, "paragraph")
 
             #print(f"OUTLINE: {line!r}")
+
+            ############ CONVERT EMBEDS AND INTERNAL LINKS ############
+
             # take care of embeds, ![[title]] before internal links, [[title]]
             # so that we don't have to worry about accidentally mistaking an
             # embed for a internal link
@@ -220,6 +479,8 @@ def process_and_save_file(source_path, output_path, new_name,
                 #print(f"after: {line}")
 
             output.append(line)
+            previous_line = unprocessed_line
+            #print(f"{previous_line=}")
 
         # write output
         #pprint(output)
@@ -343,10 +604,20 @@ if __name__ == "__main__":
     parser.add_argument('--remove-frontmatter',
                         help="Remove frontmatter. Frontmatter is kept as a code block by default",
                         action='store_true')
-    parser.add_argument('--alias-title', help="Add existing title as an alias.",
+    title_options = parser.add_mutually_exclusive_group()
+    title_options.add_argument('--alias-title',
+                               help="Add existing title as an alias.",
+                               action='store_true')
+    title_options.add_argument('--use-title',
+                               help="Use title from frontmatter as title:: property value. Requires that no duplicate titles exist.",
+                               action='store_true')
+    parser.add_argument('--four-space-indent',
+                        help="Indent using four spaces. Default: tab",
                         action='store_true')
-    parser.add_argument('--four-space-indent', help="Indent using four spaces. Default: tab",
-                        action='store_true')
+    parser.add_argument('--remove-empty-lines',
+                        help="Remove empty lines. none: Don't remove any empty lines, all: Remove all empty lines, trim: Remove empty lines after headings and in beginning, keep maximum of one empty line in rest of document. Default: trim",
+                        choices=['none', 'all', 'trim'],
+                        default='trim')
     parser.add_argument('-y', '--yes', help="Answer yes to all prompts.",
                         action='store_true')
     args = parser.parse_args()
@@ -381,10 +652,14 @@ if __name__ == "__main__":
         for title, filepaths in duplicates.items():
             print(f"  * Title: {title!r} in files {', '.join(filepaths)}")
         print()
+        if args.use_title:
+            print("No duplicate titles allowed with --use-titles. Please resolve and re-run command.")
+            sys.exit(1)
         if not args.yes and not ask_for_confirmation("Continue?", default='y'):
             print("Aborting")
             sys.exit(1)
 
     vault2graph(vault_path, output_path,
                 remove_frontmatter=args.remove_frontmatter,
-                alias_title=args.alias_title)
+                alias_title=args.alias_title, use_title=args.use_title,
+                remove_empty_lines=args.remove_empty_lines)
