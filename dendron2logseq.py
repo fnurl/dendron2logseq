@@ -24,7 +24,7 @@ bullet_re = re.compile(r"^( *)([-*+])(.*)")
 embed_token_re = re.compile(r"!\[\[.+?\]\]")
 embed_token_with_anchor_re = re.compile(r"!\[\[(.+?)(#.*)?\]\]")
 wiki_link_token_re = re.compile(r"\[\[.+?\]\]")
-wiki_link_token_with_internals_re = re.compile(r"\[\[(.*?|)?(.+?)(#.*)?\]\]")
+wiki_link_token_with_internals_re = re.compile(r"\[\[(.*?\|)?(.+?)(#.*)?\]\]")
 image_assets_re = re.compile(r"(!\[.*?\]\()(/assets/)(.*?\))")
 
 
@@ -549,11 +549,12 @@ def convert_internal_links(line):
         #print(f"{non_code_splits[nc_i]=}")
         # a non_code split (possibly containing a link) is split into splits
         # without links using link token regex as separators.
-        # link tokens (separators) should be modified: Replace . -> /
+        # link tokens, the actual internal links (seen as separators of
+        # ordinary text) should be modified: Replace . -> /
         non_link_splits = wiki_link_token_re.split(non_code_splits[nc_i])
         link_token_separators = wiki_link_token_re.findall(non_code_splits[nc_i])
 
-        # replace . -> / in link tokens
+        # replace . -> / in link tokens (the links)
         link_token_index = 0
         while link_token_index < len(link_token_separators):
             link_token_separators[link_token_index] = link_token_separators[link_token_index].replace('.', '/')
@@ -565,8 +566,8 @@ def convert_internal_links(line):
         if len(non_link_splits) > 1:
             non_code_splits[nc_i] = recombine_splits_separators(non_link_splits, link_token_separators)
 
-        # replace the all dendron link tokens in non_code_split with link tokens
-        # without anchors
+        # replace the all dendron link tokens (links) in non_code_split with
+        # link tokens that do not have anchors or aliases
         #print(f"before: {non_code_splits[nc_i]=}")
         non_code_splits[nc_i] = wiki_link_token_with_internals_re.sub(r"[[\2]]", non_code_splits[nc_i])
         #print(f"after: {non_code_splits[nc_i]=}")

@@ -40,6 +40,11 @@ The script copies `.md` files and the `assets` directory from a Dendron vault di
 - **handles blockquotes in lists**
 
 
+## Bugfixes
+
+- 2023-02-23: Fixed bug in regex resulting in aliases not being stripped from internal links.
+
+
 ## Data loss
 
 Although I have done some basic verification of the functionality, but there might be bugs etc. You need to verify that the results the script produces are what you want. **I take NO responsibility for any loss of data.**
