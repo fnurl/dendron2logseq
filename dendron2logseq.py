@@ -67,7 +67,7 @@ def get_duplicate_titles(vault_path):
 def get_title(md_filepath):
     """Return title of markdown file at md_filepath. Return None if not found."""
     title = None
-    with open(md_filepath) as md_file:
+    with open(md_filepath, encoding="utf-8") as md_file:
         for line_num, line in enumerate(md_file):
             # first line - no frontmatter?
             if line_num == 0:
@@ -135,7 +135,7 @@ def process_and_save_file(source_path, output_path, new_name,
                           remove_frontmatter, alias_title, use_title,
                           remove_empty_lines):
     output = []
-    with open(source_path, 'r') as source_file:
+    with open(source_path, 'r', encoding="utf-8") as source_file:
         first_line_checked = False
         in_frontmatter = False
         in_body = False
@@ -484,7 +484,7 @@ def process_and_save_file(source_path, output_path, new_name,
 
         # write output
         #pprint(output)
-        with open(output_path / new_name, 'w') as output_file:
+        with open(output_path / new_name, 'w', encoding="utf-8") as output_file:
             output_file.write("".join(output))
 
 
