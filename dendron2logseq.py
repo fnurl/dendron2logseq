@@ -24,6 +24,7 @@ bullet_re = re.compile(r"^( *)([-*+])(.*)")
 embed_token_re = re.compile(r"!\[\[.+?\]\]")
 embed_token_with_anchor_re = re.compile(r"!\[\[(.+?)(#.*)?\]\]")
 wiki_link_token_re = re.compile(r"\[\[.+?\]\]")
+wiki_link_token_with_alias_re = re.compile(r"\[\[([^\[]+?)\|([^#].+?)(?:#.*?)?\]\]")
 wiki_link_token_with_internals_re = re.compile(r"\[\[(.*?\|)?(.+?)(#.*)?\]\]")
 image_assets_re = re.compile(r"(!\[.*?\]\()(/assets/)(.*?\))")
 
@@ -566,9 +567,15 @@ def convert_internal_links(line):
         if len(non_link_splits) > 1:
             non_code_splits[nc_i] = recombine_splits_separators(non_link_splits, link_token_separators)
 
-        # replace the all dendron link tokens (links) in non_code_split with
-        # link tokens that do not have anchors or aliases
+        # replace all the dendron link tokens (links) in non_code_split
         #print(f"before: {non_code_splits[nc_i]=}")
+        if wiki_link_token_with_alias_re.search(non_code_splits[nc_i]):
+            # Replace wikilinks with aliases :
+            # * from [[alias|page]] to [alias]([[page]])
+            # * from [[alias|page#header]] to [alias]([[page]])
+            non_code_splits[nc_i] = wiki_link_token_with_alias_re.sub(r"[\1]([[\2]])", non_code_splits[nc_i])
+
+        # Replace wikilinks with link tokens that do not have anchors or aliases
         non_code_splits[nc_i] = wiki_link_token_with_internals_re.sub(r"[[\2]]", non_code_splits[nc_i])
         #print(f"after: {non_code_splits[nc_i]=}")
         nc_i += 1
