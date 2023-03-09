@@ -13,10 +13,10 @@ The script copies `.md` files and the `assets` directory from a Dendron vault di
     - `[[alias|note-title#heading]]` -> `[alias]([[note-title]])`
     - `[[note-title#heading]]` -> `[[note-title]]`
 - **changes embeds** from Dendron's syntax to Logseq' syntax, note that **anchors are removed**:
-    - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
-    - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
-    - `![[a.b.embedded-note#^blockref]]` -> `{{embed [[a/b/embedded-note]]}}
-    - `![[a.b.embedded-note#start:#end]]` -> `{{embed [[a/b/embedded-note]]}}
+    - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}`
+    - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}`
+    - `![[a.b.embedded-note#^blockref]]` -> `{{embed [[a/b/embedded-note]]}}`
+    - `![[a.b.embedded-note#start:#end]]` -> `{{embed [[a/b/embedded-note]]}}`
 - **changes inline images** from `![.*](/assets/.*)` to `![.*](../assets/.*)`; you need to put the `assets` folder in the same directory as the `pages/` directory
 - **yaml frontmatter -> code block**: the yaml frontmatter is converted to a code block at the top of the page
     - Logseq reads `yaml` frontmatter and picks up the title, but titles must be unique, I had a lot of pages with the same name but in different hierarchies, so this was my solution
@@ -33,7 +33,7 @@ The script copies `.md` files and the `assets` directory from a Dendron vault di
 - **multiline** paragraphs and blockquotes are kept in the same outline bullet
 - **use `title:` as `title::` property**; will abort if duplicate titles are found
 - **converts indented code blocks** (using tab or four spaces as prefix) to fenced code blocks
-- **added option for how to handle empty lines**, `--remove-empty-lines {none, all, trim}`, default: `trim`:
+- **added option for how to handle empty lines**, `--remove-empty-lines {none, all, trim}`, default: `trim`
     - `none`: don't remove empty lines
     - `all`: remove all empty lines
     - `trim`: remove empty lines in the beginning of the body and after headings, keep a maximum of one empty line in the rest of the body
