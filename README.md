@@ -8,8 +8,9 @@ Limited export of the contents of a [Dendron](https://www.dendron.so) vault to a
 The script copies `.md` files and the `assets` directory from a Dendron vault directory to an output directory. It makes the `.md` files Logseq ready by doing the following:
 
 - **renames files** from Dendrons `category.subcategory.note-title.md` to Logseqs `category___subcategory___note-title.md`
-- **changes wikilinks** from Dendron's `[[catetegory.subcategory.note-title]]` to Logseq's `[[category/subcategory/note-title]]`, it also **removes** aliases and anchors from the wikilinks:
-    - `[[alias|note-title]]` -> `[[note-title]]`
+- **changes wikilinks** from Dendron's `[[catetegory.subcategory.note-title]]` to Logseq's `[[category/subcategory/note-title]]`, it also fixes aliases and **removes** anchors from the wikilinks:
+    - `[[alias|note-title]]` -> `[alias]([[note-title]])`
+    - `[[alias|note-title#heading]]` -> `[alias]([[note-title]])`
     - `[[note-title#heading]]` -> `[[note-title]]`
 - **changes embeds** from Dendron's syntax to Logseq' syntax, note that **anchors are removed**:
     - `![[a.b.embedded-note]]` -> `{{embed [[a/b/embedded-note]]}}
