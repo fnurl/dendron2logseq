@@ -101,12 +101,13 @@ def push_to_stack_no_repeat(stack, value):
 
 
 def vault2graph(vault_path, output_path, remove_frontmatter, alias_title,
-                use_title, remove_empty_lines):
+                use_title, remove_empty_lines, ignore_level_1_headings):
     """Save assets dir and processed markdown files to output_path."""
     print(f"\nProcessing Dendron vault at {vault_path.resolve()}")
-    msg = "Options: {rm_fm}, {alias}, {title}, {rm_lines}\n"
+    msg = "Options: {rm_fm}, {alias}, {title}, {rm_lines}, {level_1_headings}\n"
     print(msg.format(rm_fm=f"{remove_frontmatter=}", alias=f"{alias_title=}",
-                     title=f"{use_title=}", rm_lines=f"{remove_empty_lines=}"))
+                     title=f"{use_title=}", rm_lines=f"{remove_empty_lines=}",
+                     level_1_headings=f"{ignore_level_1_headings=}"))
 
     # process directory items
     assets_path = None
@@ -121,7 +122,7 @@ def vault2graph(vault_path, output_path, remove_frontmatter, alias_title,
             print(f"{childpath.name} -> {new_name}")
             process_and_save_file(childpath, output_path, new_name,
                                   remove_frontmatter, alias_title, use_title,
-                                  remove_empty_lines)
+                                  remove_empty_lines, ignore_level_1_headings)
         else:
             print(f"WARNING: File not handled, {childpath.name!r}")
 
@@ -134,7 +135,7 @@ def vault2graph(vault_path, output_path, remove_frontmatter, alias_title,
 
 def process_and_save_file(source_path, output_path, new_name,
                           remove_frontmatter, alias_title, use_title,
-                          remove_empty_lines):
+                          remove_empty_lines, ignore_level_1_headings):
     output = []
     with open(source_path, 'r', encoding="utf-8") as source_file:
         first_line_checked = False
@@ -387,7 +388,10 @@ def process_and_save_file(source_path, output_path, new_name,
                 #print(f"HEADING: {line!r}")
                 match = heading_re.match(line)
                 if match:
-                    heading_level = len(match[1])
+                    if ignore_level_1_headings:
+                      heading_level = max(0, len(match[1]) - 1)
+                    else:
+                      heading_level = len(match[1])
 
                     # heading clears content_stack
                     indent_level = 0
@@ -612,6 +616,9 @@ if __name__ == "__main__":
     parser.add_argument('--remove-frontmatter',
                         help="Remove frontmatter. Frontmatter is kept as a code block by default",
                         action='store_true')
+    parser.add_argument('--ignore-level-1-headings',
+                        help="Remove one level of indentation. Enable it if you don't use level 1 headings (# Text) in you notes.",
+                        action='store_true')
     title_options = parser.add_mutually_exclusive_group()
     title_options.add_argument('--alias-title',
                                help="Add existing title as an alias.",
@@ -670,4 +677,5 @@ if __name__ == "__main__":
     vault2graph(vault_path, output_path,
                 remove_frontmatter=args.remove_frontmatter,
                 alias_title=args.alias_title, use_title=args.use_title,
-                remove_empty_lines=args.remove_empty_lines)
+                remove_empty_lines=args.remove_empty_lines,
+                ignore_level_1_headings=args.ignore_level_1_headings)
